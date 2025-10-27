@@ -78,12 +78,6 @@ world_map <- map_data("world")
 ```{r transform variables}
 
 ##------------------------------------------------------------------------------
-## select variables
-##------------------------------------------------------------------------------
-
-
-
-##------------------------------------------------------------------------------
 ## socio-demographics & identity
 ##------------------------------------------------------------------------------
 afro_wave9$age <- ifelse(afro_wave9$Q1 > 120, NA, afro_wave9$Q1)
@@ -183,14 +177,14 @@ afro_wave9$trust_trad_leaders <- ifelse(afro_wave9$Q37J > 3, NA, afro_wave9$Q37J
 afro_wave9$trust_rel_leaders <- ifelse(afro_wave9$Q37K > 3, NA, afro_wave9$Q37K)
 
 ## Dummy trust parliament
-afro_wave9$dummy_trust_parl <- ifelse(afro_wave9$Q37A == 2 |
-                                      afro_wave9$Q37A == 3, 1,
-                                      ifelse(afro_wave9$Q37A > 3, NA, 0))
-
-## Dummy trust president
-afro_wave9$dummy_trust_pres <- ifelse(afro_wave9$Q37B == 2 |
+afro_wave9$dummy_trust_parl <- ifelse(afro_wave9$Q37B == 2 |
                                       afro_wave9$Q37B == 3, 1,
                                       ifelse(afro_wave9$Q37B > 3, NA, 0))
+
+## Dummy trust president
+afro_wave9$dummy_trust_pres <- ifelse(afro_wave9$Q37A == 2 |
+                                      afro_wave9$Q37A == 3, 1,
+                                      ifelse(afro_wave9$Q37A > 3, NA, 0))
 
 ## Dummy trust local council
 afro_wave9$dummy_trust_loc_coun <- ifelse(afro_wave9$Q37D == 2 |
@@ -356,6 +350,30 @@ afro_wave9_filtered$responsib_merge <- factor(afro_wave9_filtered$responsib_merg
 
 barplot(table(afro_wave9_filtered$responsib_merge))
 
+
+##------------------------------------------------------------------------------
+## add additional variables
+##------------------------------------------------------------------------------
+x <- afro_wave9_filtered$political_trust_index
+afro_wave9_filtered$pol_trust_categorical <- cut(
+  x,
+  breaks = c(-Inf, 1, 3, Inf),
+  labels = c("low", "medium", "high")
+)
+
+summary(afro_wave9_filtered$pol_trust_categorical)
+
+
+##------------------------------------------------------------------------------
+## add context variable
+##------------------------------------------------------------------------------
+afro_wave9_filtered <- afro_wave9_filtered %>%
+  group_by(country_alp) %>%
+  mutate(
+    pol_trust_cntry = weighted.mean(political_trust_index, w = Combinwt_new_hh, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
 ```
 
 
@@ -414,32 +432,6 @@ ggplot(afro_wave9[which(!is.na(afro_wave9$dummy_trust_parl)),],
   theme_minimal()
 
 
-##------------------------------------------------------------------------------
-## Plot social trust per country
-##------------------------------------------------------------------------------
-
-# reorder according to difference between 1 and 0
-
-# frequency table 0 and 1 per country
-frequency_table <- table(afro_wave9$country_alp, afro_wave9$dummy_social_trust)
-
-# Calculate the difference in frequencies
-difference <- frequency_table[,1] - frequency_table[,2]
-result_diff <- data.frame(country_alp = names(difference),
-                          diff_social_trust = as.vector(difference))
-
-# match to dataset
-afro_wave9 <- left_join(afro_wave9, result_diff, by = "country_alp")
-
-## plot distribution of responsibility dummy per country
-ggplot(afro_wave9[which(!is.na(afro_wave9$dummy_social_trust)),], 
-       aes(x = reorder(country_alp, diff_social_trust), fill = as.factor(dummy_social_trust))) +
-  geom_bar(position = "dodge") +
-  coord_flip() + 
-  labs(title = "Bar Plot of Dummy Variable by Country", x = "Country", y = "Frequency") +
-  theme_minimal()
-
-
 #-------------------------------------------------------------------------------
 # Plot on map air pollution
 #-------------------------------------------------------------------------------
@@ -484,24 +476,45 @@ theme(axis.title = element_text(size = 15),
 ##------------------------------------------------------------------------------
 ## run some models
 ##------------------------------------------------------------------------------
-m1 <- glm(dummy_responsib ~ log_ratio_pol_soc_trust + as.factor(country_alp) + 
-             age + gender + as.factor(education),
-          data = afro_wave9_filtered, family = binomial(link = "logit"))
+
+## binary outcome (dummy = 1 (responsibility assigned to government))
+m1 <- glm(dummy_responsib ~ pol_minus_soc + 
+             age + as.factor(gender) + as.factor(education) + as.factor(country_alp),
+          data = afro_wave9_filtered, family = binomial(link = "logit"), weights = Combinwt_new_hh)
+
+summary(m1)
 
 m2 <- glm(dummy_responsib ~ political_trust_index + social_trust_index + 
-            age + gender + as.factor(education) + as.factor(occupation) + 
-            as.factor(country_alp), 
+            age + as.factor(gender) + as.factor(education) + as.factor(country_alp), 
           data = afro_wave9_filtered, 
-          family = binomial)
-
-library(nnet)
-m3 <- multinom(responsib_merge ~ political_trust_index + social_trust_index + 
-                 age + gender + as.factor(education) + as.factor(country_alp), 
-               data = afro_wave9_filtered)
-
-stargazer(m3, type = "text", omit = c("country_alp", "education"))
+          family = binomial(link = "logit"), weights = Combinwt_new_hh)
 
 summary(m2)
+
+m3 <- glm(dummy_responsib ~ pol_trust_categorical + 
+            age + as.factor(gender) + as.factor(education) + as.factor(country_alp), 
+          data = afro_wave9_filtered, 
+          family = binomial(link = "logit"), weights = Combinwt_new_hh)
+
+summary(m3)
+
+m_int <- glm(dummy_responsib ~ pol_minus_soc*pol_trust_cntry + 
+               age + as.factor(gender) + as.factor(education),
+             data = afro_wave9_filtered, family = binomial(), 
+             weights = Combinwt_new_hh)
+
+summary(m_int)
+
+## multinomial outcome
+library(nnet)
+afro_wave9_filtered$responsib_merge <- relevel(afro_wave9_filtered$responsib_merge, ref = "The government")
+m4 <- multinom(responsib_merge ~ pol_minus_soc + 
+                 age + as.factor(gender) + as.factor(education) + as.factor(country_alp), 
+               data = afro_wave9_filtered)
+
+stargazer(m4, type = "text", omit = c("country_alp", "education"))
+
+summary(m4)
 
 ```
 
