@@ -1,0 +1,507 @@
+---
+title: "Afrobarometer"
+author: "Ella Henninger"
+date: "2025-10-27"
+output: html_document
+---
+
+## Set-up 
+
+```{r setup, include=FALSE}
+
+## clean environment
+rm(list = ls())
+
+# Define which packages needed for analyses
+p_needed <-
+  c("knitr",
+    "dplyr",
+    "stargazer",
+    "car",
+    "ggplot2",
+    "viridis",
+    "rsample",
+    "MASS",
+    "lme4",
+    "devtools",
+    "haven",
+    "modelsummary",
+    "ggmap",
+    "maps",
+    "data.table",
+    "texreg", 
+    "fastDummies",
+    "margins")
+
+# Check which packages are already installed on your computer
+packages <- rownames(installed.packages())
+
+# Check which packages are not installed
+p_to_install <- p_needed[!(p_needed %in% packages)]
+
+if (length(p_to_install) > 0) {
+  utils::install.packages(p_to_install)
+}
+sapply(p_needed, require, character.only = TRUE)
+
+
+# Set an option for the final document that can be produced from the .Rmd file.
+knitr::opts_chunk$set(echo = TRUE)
+
+## For replicability: session information 
+session_info <- print(sessionInfo())
+
+```
+
+
+## Load data
+
+```{r load data}
+
+##------------------------------------------------------------------------------
+## Get data
+##------------------------------------------------------------------------------
+afro_wave9 <- read_sav("data/R9.Merge_39ctry.20Nov23.final_.release_Updated.4Jun25-3.sav")
+
+
+## get country alphabetic
+afro_wave9$country_alp <- haven::as_factor(afro_wave9$COUNTRY)
+
+## load world map data
+world_map <- map_data("world")
+
+```
+
+
+## Variable selection and transformation
+
+```{r transform variables}
+
+##------------------------------------------------------------------------------
+## select variables
+##------------------------------------------------------------------------------
+
+
+
+##------------------------------------------------------------------------------
+## socio-demographics & identity
+##------------------------------------------------------------------------------
+afro_wave9$age <- ifelse(afro_wave9$Q1 > 120, NA, afro_wave9$Q1)
+afro_wave9$gender <- afro_wave9$Q100  # (1 = man, 2 = woman)
+afro_wave9$race <- ifelse(afro_wave9$Q101 > 6, NA, afro_wave9$Q101)
+afro_wave9$ethnic_group <- ifelse(afro_wave9$Q84A > 9989, NA, afro_wave9$Q84A)
+afro_wave9$ties_w_others <- ifelse(afro_wave9$Q85A > 5, NA, afro_wave9$Q85A)
+afro_wave9$belonging_percep_others <- ifelse(afro_wave9$Q88B > 5, NA, afro_wave9$Q88B)
+
+afro_wave9$employ_status <- ifelse(afro_wave9$Q93A > 3, NA, afro_wave9$Q93A)
+afro_wave9$occupation <- ifelse(afro_wave9$Q93B > 12, NA, afro_wave9$Q93B)
+afro_wave9$education <- ifelse(afro_wave9$Q94 > 9, NA, afro_wave9$Q94)
+
+afro_wave9$religion <- ifelse(afro_wave9$Q95 > 9989, NA, afro_wave9$Q95)
+
+##------------------------------------------------------------------------------
+## economic conditions
+##------------------------------------------------------------------------------
+afro_wave9$cond_econ_general <- ifelse(afro_wave9$Q4A > 5, NA, afro_wave9$Q4A)
+afro_wave9$cond_econ_personal <- ifelse(afro_wave9$Q4B > 5, NA, afro_wave9$Q4B)
+afro_wave9$cond_econ_retrospective <- ifelse(afro_wave9$Q5A > 5, NA, afro_wave9$Q5A)
+afro_wave9$cond_econ_prospective <- ifelse(afro_wave9$Q5B > 5, NA, afro_wave9$Q5B)
+
+
+##------------------------------------------------------------------------------
+## political variables (interest, freedom of speech etc)
+##------------------------------------------------------------------------------
+afro_wave9$discuss_politics <- ifelse(afro_wave9$Q8 > 3, NA, afro_wave9$Q8)
+afro_wave9$info_radio <- ifelse(afro_wave9$Q74A > 4, NA, afro_wave9$Q74A)
+afro_wave9$info_tv <- ifelse(afro_wave9$Q74B > 4, NA, afro_wave9$Q74B)
+afro_wave9$info_print <- ifelse(afro_wave9$Q74C > 4, NA, afro_wave9$Q74C)
+afro_wave9$info_internet <- ifelse(afro_wave9$Q74D > 4, NA, afro_wave9$Q74D)
+afro_wave9$info_social_med <- ifelse(afro_wave9$Q74E > 4, NA, afro_wave9$Q74E)
+
+afro_wave9$freedom_speech <- ifelse(afro_wave9$Q9A > 4, NA, afro_wave9$Q9A)
+afro_wave9$freedom_pol_org <- ifelse(afro_wave9$Q9B > 4, NA, afro_wave9$Q9B)
+afro_wave9$freedom_voting <- ifelse(afro_wave9$Q9C > 4, NA, afro_wave9$Q9C)
+
+afro_wave9$attend_comm_meeting <- ifelse(afro_wave9$Q10A > 4, NA, afro_wave9$Q10A)
+afro_wave9$raise_issue <- ifelse(afro_wave9$Q10B > 4, NA, afro_wave9$Q10B)
+afro_wave9$partic_demonstr <- ifelse(afro_wave9$Q10C > 4, NA, afro_wave9$Q10C)
+
+afro_wave9$likelihood_approach_gov <- ifelse(afro_wave9$Q11A > 3, NA, afro_wave9$Q11A)
+afro_wave9$contact_loc_gov <- ifelse(afro_wave9$Q11B > 3, NA, afro_wave9$Q11B)
+afro_wave9$contact_MP <- ifelse(afro_wave9$Q11C > 3, NA, afro_wave9$Q11C)
+afro_wave9$contact_party_off <- ifelse(afro_wave9$Q11D > 3, NA, afro_wave9$Q11D)
+afro_wave9$contact_trad_lead <- ifelse(afro_wave9$Q11E > 3, NA, afro_wave9$Q11E)
+
+afro_wave9$vote <- ifelse(afro_wave9$Q13 > 3, NA, afro_wave9$Q13)
+afro_wave9$gov_boss_employee <- ifelse(afro_wave9$Q19A > 5, NA, afro_wave9$Q19A)
+afro_wave9$gov_delegate_own <- ifelse(afro_wave9$Q19B > 5, NA, afro_wave9$Q19B)
+
+afro_wave9$pref_democracy <- ifelse(afro_wave9$Q23 > 3, NA, afro_wave9$Q23)
+afro_wave9$level_democracy <- ifelse(afro_wave9$Q30 > 8, NA, afro_wave9$Q30)
+afro_wave9$satisf_democracy <- ifelse(afro_wave9$Q31 > 4, NA, afro_wave9$Q31)
+afro_wave9$democracy_retrospective <- ifelse(afro_wave9$Q32A > 5, NA, afro_wave9$Q32A)
+afro_wave9$democracy_prospective <- ifelse(afro_wave9$Q32B > 5, NA, afro_wave9$Q32B)
+
+afro_wave9$close_party <- ifelse(afro_wave9$Q89A > 8, NA, afro_wave9$Q89A)
+
+afro_wave9$efficacy_parl <- afro_wave9$Q34A
+afro_wave9$efficacy_local_gov_counc <- afro_wave9$Q34B
+
+
+##------------------------------------------------------------------------------
+## corruption perceptions
+##------------------------------------------------------------------------------
+afro_wave9$corrupt_pres <- ifelse(afro_wave9$Q38A > 3, NA, afro_wave9$Q38A)
+afro_wave9$corrupt_mps <- ifelse(afro_wave9$Q38B > 3, NA, afro_wave9$Q38B)
+afro_wave9$corrupt_local_gov <- ifelse(afro_wave9$Q38D > 3, NA, afro_wave9$Q38D)
+afro_wave9$corrupt_trad_lead <- ifelse(afro_wave9$Q38H > 3, NA, afro_wave9$Q38H)
+afro_wave9$corrupt_business <- ifelse(afro_wave9$Q38J > 3, NA, afro_wave9$Q38J)
+afro_wave9$corrupt_ngo <- ifelse(afro_wave9$Q38K > 3, NA, afro_wave9$Q38K)
+
+
+##------------------------------------------------------------------------------
+## government performance
+##------------------------------------------------------------------------------
+afro_wave9$performance_environ <- ifelse(afro_wave9$Q46Q > 4, NA, afro_wave9$Q46Q)
+afro_wave9$performance_econ <- ifelse(afro_wave9$Q46A > 4, NA, afro_wave9$Q46A)
+afro_wave9$performance_inequ <- ifelse(afro_wave9$Q46E > 4, NA, afro_wave9$Q46E)
+
+
+##------------------------------------------------------------------------------
+## trust variable (political) / 0 = not at all, 3 = a lot
+##------------------------------------------------------------------------------
+afro_wave9$trust_pres <- ifelse(afro_wave9$Q37A > 3, NA, afro_wave9$Q37A)
+afro_wave9$trust_parliament <- ifelse(afro_wave9$Q37B > 3, NA, afro_wave9$Q37B)
+afro_wave9$trust_indep_elec_comm <- ifelse(afro_wave9$Q37C > 3, NA, afro_wave9$Q37C)
+afro_wave9$trust_local_gov_counc <- ifelse(afro_wave9$Q37D > 3, NA, afro_wave9$Q37D)
+afro_wave9$trust_ruling_party <- ifelse(afro_wave9$Q37E > 3, NA, afro_wave9$Q37E)
+afro_wave9$trust_oppos_party <- ifelse(afro_wave9$Q37F > 3, NA, afro_wave9$Q37F)
+afro_wave9$trust_police <- ifelse(afro_wave9$Q37G > 3, NA, afro_wave9$Q37G)
+afro_wave9$trust_army <- ifelse(afro_wave9$Q37H > 3, NA, afro_wave9$Q37H)
+afro_wave9$trust_courts <- ifelse(afro_wave9$Q37I > 3, NA, afro_wave9$Q37I)
+afro_wave9$trust_trad_leaders <- ifelse(afro_wave9$Q37J > 3, NA, afro_wave9$Q37J)
+afro_wave9$trust_rel_leaders <- ifelse(afro_wave9$Q37K > 3, NA, afro_wave9$Q37K)
+
+## Dummy trust parliament
+afro_wave9$dummy_trust_parl <- ifelse(afro_wave9$Q37A == 2 |
+                                      afro_wave9$Q37A == 3, 1,
+                                      ifelse(afro_wave9$Q37A > 3, NA, 0))
+
+## Dummy trust president
+afro_wave9$dummy_trust_pres <- ifelse(afro_wave9$Q37B == 2 |
+                                      afro_wave9$Q37B == 3, 1,
+                                      ifelse(afro_wave9$Q37B > 3, NA, 0))
+
+## Dummy trust local council
+afro_wave9$dummy_trust_loc_coun <- ifelse(afro_wave9$Q37D == 2 |
+                                          afro_wave9$Q37D == 3, 1,
+                                          ifelse(afro_wave9$Q37D > 3, NA, 0))
+
+
+##------------------------------------------------------------------------------
+## trust variable (social)
+##------------------------------------------------------------------------------
+afro_wave9$trust_national <- ifelse(afro_wave9$Q86A > 3, NA, afro_wave9$Q86A)
+afro_wave9$trust_relatives <- ifelse(afro_wave9$Q86B > 3, NA, afro_wave9$Q86B)
+afro_wave9$trust_neighbours <- ifelse(afro_wave9$Q86C > 3, NA, afro_wave9$Q86C)
+afro_wave9$trust_others <- ifelse(afro_wave9$Q86D > 3, NA, afro_wave9$Q86D)
+afro_wave9$trust_other_rel <- ifelse(afro_wave9$Q86E > 3, NA, afro_wave9$Q86E)
+afro_wave9$trust_other_eth <- ifelse(afro_wave9$Q86F > 3, NA, afro_wave9$Q86F)
+
+
+## neighbours ( 1 = strongly dislike, 5 = strongly like)
+afro_wave9$neighbour_rel <- ifelse(afro_wave9$Q87A > 5, NA, afro_wave9$Q87A)
+afro_wave9$neighbour_eth <- ifelse(afro_wave9$Q87B > 5, NA, afro_wave9$Q87B)
+afro_wave9$neighbour_homo <- ifelse(afro_wave9$Q87C > 5, NA, afro_wave9$Q87C)
+afro_wave9$neighbour_imm <- ifelse(afro_wave9$Q87D > 5, NA, afro_wave9$Q87D)
+afro_wave9$neighbour_polit <- ifelse(afro_wave9$Q87E > 5, NA, afro_wave9$Q87E)
+
+
+##------------------------------------------------------------------------------
+## environmental variables
+##------------------------------------------------------------------------------
+afro_wave9$econ_environm <- ifelse(afro_wave9$Q71 > 5, NA, afro_wave9$Q71)
+afro_wave9$serious_pollution <- ifelse(afro_wave9$Q72A > 4, NA, afro_wave9$Q72A)
+afro_wave9$most_serious_pollution <- haven::as_factor(afro_wave9$Q72B)
+afro_wave9$responsibility <- haven::as_factor(afro_wave9$Q72D)
+
+## responsibility variable - dummy
+afro_wave9$dummy_responsib <- ifelse(afro_wave9$Q72D == 3 |
+                                     afro_wave9$Q72D == 4, 1,
+                                     ifelse(afro_wave9$Q72D == -1 |
+                                            afro_wave9$Q72D == 8 |
+                                            afro_wave9$Q72D == 9, NA, 0)) 
+
+afro_wave9$gov_action_pollution <- ifelse(afro_wave9$Q72E > 5, NA, afro_wave9$Q72E)
+
+
+```
+
+
+## Create trust factor variables
+
+```{r trust factor analysis}
+
+##------------------------------------------------------------------------------
+## correlation trust variables
+##------------------------------------------------------------------------------
+trust_data <- afro_wave9[,c("trust_pres",
+                            "trust_parliament",
+                            "trust_indep_elec_comm",
+                            "trust_local_gov_counc",
+                            "trust_ruling_party",
+                            "trust_oppos_party",
+                            "trust_police",
+                            "trust_army",
+                            "trust_courts",
+                            "trust_trad_leaders",
+                            "trust_rel_leaders",
+                            "trust_national",
+                            "trust_relatives", 
+                            "trust_neighbours",
+                            "trust_others", 
+                            "trust_other_rel", 
+                            "trust_other_eth" )]
+
+
+## Correlation matrix
+cor_matrix_trust <- cor(trust_data, use = "pairwise.complete.obs")
+
+library(psych)
+## Kaiser-Meyer-Olkin (KMO) Test
+kmo <- KMO(cor_matrix_trust)
+print(kmo)
+
+## Scree plot and Parallel Analysis
+fa.parallel(cor_matrix_trust, fa = "fa")
+
+## Assume 2 factors based on scree plot and parallel analysis
+fa_result <- fa(cor_matrix_trust, nfactors = 2, rotate = "varimax")
+
+loadings_matrix <- as.data.frame.matrix(fa_result$loadings)
+
+political_items <- rownames(loadings_matrix)[loadings_matrix$MR1 > 0.67]
+social_items <- rownames(loadings_matrix)[loadings_matrix$MR2 > 0.7]
+
+# Create indices based on factor loadings
+# Adjust the selection of items based on actual loadings
+trust_data$political_trust_index <- rowMeans(trust_data[,c("trust_pres",
+                                                           "trust_parliament",
+                                                           "trust_indep_elec_comm",
+                                                           "trust_ruling_party")], na.rm = T) + 1
+
+trust_data$social_trust_index <- rowMeans(trust_data[,c("trust_national",
+                                                        "trust_neighbours",
+                                                        "trust_others",
+                                                        "trust_other_rel",
+                                                        "trust_other_eth")], na.rm = T) + 1
+
+
+
+##------------------------------------------------------------------------------
+## pol - soc index: political / social trust
+##------------------------------------------------------------------------------
+trust_data$pol_minus_soc <- trust_data$political_trust_index - trust_data$social_trust_index
+
+## This index shows the relation between political and social trust within individuals.
+## Values greater than 1 express that an individual has higher political than social trust.
+## Values smaller than 1 express that an individual has lower political than social trust.
+## This index should most accurately reflect the theoretical argumentation > depending on the predominant recipient of (dis)trust, individuals should attribute responsibility for managing societal problems. 
+
+
+##------------------------------------------------------------------------------
+## merge with original dataset
+##------------------------------------------------------------------------------
+afro_wave9$social_trust_index <- trust_data$social_trust_index
+afro_wave9$political_trust_index <- trust_data$political_trust_index
+afro_wave9$pol_minus_soc <- trust_data$pol_minus_soc
+
+```
+
+
+## Select relevant variables
+
+```{r select var}
+
+##------------------------------------------------------------------------------
+## select
+##------------------------------------------------------------------------------
+
+# make sure I will select the right columns for the added variables
+first_var <- which(colnames(afro_wave9) == "country_alp")
+last_var <- which(colnames(afro_wave9) == "pol_minus_soc")
+add_var <- which(colnames(afro_wave9) %in% c("RESPNO", "COUNTRY", "REGION", "DATEINTR", "URBRUR", "withinwt_ea", "withinwt_hh", "Combinwt_new_hh"))
+
+afro_wave9_s <- afro_wave9[,c(add_var, first_var:last_var)]
+
+##------------------------------------------------------------------------------
+## Filter
+##------------------------------------------------------------------------------
+table(afro_wave9_s$responsibility)
+
+## filter out missing, none of these/no one, someone else, refused, don't know
+afro_wave9_filtered <- afro_wave9_s[which(afro_wave9_s$responsibility != "Missing" &
+                                          afro_wave9_s$responsibility != "Refused" &
+                                          afro_wave9_s$responsibility != "Don’t know" &
+                                          afro_wave9_s$responsibility != "Someone else"&
+                                          afro_wave9_s$responsibility != "None of these / No one"),]
+
+barplot(table(afro_wave9_filtered$responsibility))
+
+## add local and national government together?
+targets <- c("The national government", "Local government")
+afro_wave9_filtered$responsib_merge <- as.character(afro_wave9_filtered$responsibility)
+afro_wave9_filtered$responsib_merge[afro_wave9_filtered$responsib_merge %in% targets] <- "The government"
+afro_wave9_filtered$responsib_merge <- factor(afro_wave9_filtered$responsib_merge)
+
+barplot(table(afro_wave9_filtered$responsib_merge))
+
+```
+
+
+## Some descriptive plots
+
+```{r plot descriptives}
+
+##------------------------------------------------------------------------------
+## Plot responsibility per country
+##------------------------------------------------------------------------------
+
+# reorder according to difference between 1 and 0
+
+# frequency table 0 and 1 per country
+frequency_table <- table(afro_wave9$country_alp, afro_wave9$dummy_responsib)
+
+# Calculate the difference in frequencies
+difference <- frequency_table[,1] - frequency_table[,2]
+result_diff <- data.frame(country_alp = names(difference),
+                          diff_respons = as.vector(difference))
+
+# match to dataset
+afro_wave9 <- left_join(afro_wave9, result_diff, by = "country_alp")
+
+ggplot(afro_wave9[which(!is.na(afro_wave9$dummy_responsib)),], 
+       aes(x = reorder(country_alp, diff_respons), fill = as.factor(dummy_responsib))) +
+  geom_bar(position = "dodge") +
+  coord_flip() +  # Add coord_flip() to flip the axes
+  labs(title = "Bar Plot of Dummy Variable by Country", x = "Country", y = "Frequency") +
+  theme_minimal()
+
+
+##------------------------------------------------------------------------------
+## Plot trust parliament per country
+##------------------------------------------------------------------------------
+
+# reorder according to difference between 1 and 0
+
+# frequency table 0 and 1 per country
+frequency_table <- table(afro_wave9$country_alp, afro_wave9$dummy_trust_parl)
+
+# Calculate the difference in frequencies
+difference <- frequency_table[,1] - frequency_table[,2]
+result_diff <- data.frame(country_alp = names(difference),
+                          diff_trust = as.vector(difference))
+
+# match to dataset
+afro_wave9 <- left_join(afro_wave9, result_diff, by = "country_alp")
+
+## plot distribution of responsibility dummy per country
+ggplot(afro_wave9[which(!is.na(afro_wave9$dummy_trust_parl)),], 
+       aes(x = reorder(country_alp, diff_trust), fill = as.factor(dummy_trust_parl))) +
+  geom_bar(position = "dodge") +
+  coord_flip() +  # Add coord_flip() to flip the axes
+  labs(title = "Bar Plot of Dummy Variable by Country", x = "Country", y = "Frequency") +
+  theme_minimal()
+
+
+##------------------------------------------------------------------------------
+## Plot social trust per country
+##------------------------------------------------------------------------------
+
+# reorder according to difference between 1 and 0
+
+# frequency table 0 and 1 per country
+frequency_table <- table(afro_wave9$country_alp, afro_wave9$dummy_social_trust)
+
+# Calculate the difference in frequencies
+difference <- frequency_table[,1] - frequency_table[,2]
+result_diff <- data.frame(country_alp = names(difference),
+                          diff_social_trust = as.vector(difference))
+
+# match to dataset
+afro_wave9 <- left_join(afro_wave9, result_diff, by = "country_alp")
+
+## plot distribution of responsibility dummy per country
+ggplot(afro_wave9[which(!is.na(afro_wave9$dummy_social_trust)),], 
+       aes(x = reorder(country_alp, diff_social_trust), fill = as.factor(dummy_social_trust))) +
+  geom_bar(position = "dodge") +
+  coord_flip() + 
+  labs(title = "Bar Plot of Dummy Variable by Country", x = "Country", y = "Frequency") +
+  theme_minimal()
+
+
+#-------------------------------------------------------------------------------
+# Plot on map air pollution
+#-------------------------------------------------------------------------------
+world_map$country_alp <- world_map$region
+world_map$country_alp[which(world_map$country_alp == "Ivory Coast")] <- "Côte d'Ivoire"
+world_map$country_alp[which(world_map$country_alp == "Cape Verde")] <- "Cabo Verde"
+world_map$country_alp[which(world_map$country_alp == "Swaziland")] <- "Eswatini"
+world_map$country_alp[which(world_map$country_alp == "Sao Tome and Principe")] <- "São Tomé and Príncipe"
+
+world_map <- left_join(world_map, afro_wave9_s, by = "country_alp")
+
+ggplot() +
+geom_map(data = world_map, map = world_map,
+         aes(long, lat, map_id = country_alp, fill = dummy_trust_loc_coun)) +
+  
+# scale_fill_gradient(low = viridis(1, alpha = 0.1),
+#                      high = viridis(1, alpha = 1),
+#                      na.value = "grey50",
+#                      guide = "colourbar",
+#                      aesthetics = "fill",
+#                      name = "Social trust") +
+#   
+theme_bw() +
+theme(panel.border = element_blank(),
+      panel.grid = element_blank()) +
+theme(axis.title = element_text(size = 15),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.ticks = element_blank(),
+      legend.title = element_text(size = 15),
+      legend.text = element_text(size = 15))
+
+```
+
+
+## Some basic models
+
+```{r models}
+
+##------------------------------------------------------------------------------
+## run some models
+##------------------------------------------------------------------------------
+m1 <- glm(dummy_responsib ~ log_ratio_pol_soc_trust + as.factor(country_alp) + 
+             age + gender + as.factor(education),
+          data = afro_wave9_filtered, family = binomial(link = "logit"))
+
+m2 <- glm(dummy_responsib ~ political_trust_index + social_trust_index + 
+            age + gender + as.factor(education) + as.factor(occupation) + 
+            as.factor(country_alp), 
+          data = afro_wave9_filtered, 
+          family = binomial)
+
+library(nnet)
+m3 <- multinom(responsib_merge ~ political_trust_index + social_trust_index + 
+                 age + gender + as.factor(education) + as.factor(country_alp), 
+               data = afro_wave9_filtered)
+
+stargazer(m3, type = "text", omit = c("country_alp", "education"))
+
+summary(m2)
+
+```
+
